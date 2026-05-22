@@ -1954,7 +1954,12 @@ let mermaSeleccion = {};
 
 function renderBajaMerma() {
   const isCliente = STATE.role === 'cliente';
-  const mermasTodas = STATE.stock.filter(s=>s.status==='MERMA' && s.qty > 0);
+  const mermasTodas = STATE.stock.filter(s => {
+    if (s.status !== 'MERMA' || Number(s.qty) <= 0) return false;
+    // Cliente solo ve las que tienen retirado = SI (contenedores 12341 y 12343)
+    if (isCliente) return s.retirado === 'SI' || ['12341','12343'].includes(s.contenedor);
+    return true;
+  });
   const contsM = [...new Set(mermasTodas.map(s=>s.contenedor).filter(Boolean))].sort();
   document.getElementById('content').innerHTML = `
     <div class="panel" style="margin-bottom:16px;">
@@ -1979,15 +1984,16 @@ function renderBajaMerma() {
         <table>
           <thead><tr>
             ${!isCliente ? `<th><input type="checkbox" id="chk-merma-all" onchange="toggleAllMerma(this)"></th>` : ''}
-            <th>Código</th><th>Descripción</th><th>Contenedor</th><th>FV</th><th>Stock</th>
+            <th>Código</th><th>Descripción</th><th>Contenedor</th><th>FV</th><th>Stock</th><th>Retirado</th>
           </tr></thead>
           <tbody id="merma-tbody">
           ${mermasTodas.map(r=>`<tr id="merma-tr-${r.id}">
             ${!isCliente ? `<td><input type="checkbox" onchange="toggleMermaLine('${r.id}',this)"></td>` : ''}
-            <td><code>${r.codigo}</code></td><td>${r.desc}</td>
+            <td><code>${r.codigo}</code></td><td>${r.desc||r.descripcion||''}</td>
             <td><span class="chip">${r.contenedor}</span></td>
             <td>${fmtFV(r.fv)} ${semBadge(r.fv)}</td>
             <td><strong>${r.qty}</strong></td>
+            <td><span style="font-weight:600;color:${(r.retirado||'NO')==='SI'?'var(--accent)':'var(--text3)'}">${r.retirado||'NO'}</span></td>
           </tr>`).join('')}
           </tbody>
         </table>
@@ -3283,7 +3289,7 @@ async function loadDataFromAPI() {
       toast('✅ Datos iniciales cargados');
     } else {
       // Mapear descripcion → desc para compatibilidad con el HTML
-      STATE.stock       = stock.map(s => ({...s, desc: s.descripcion || s.desc || ''}));
+      STATE.stock       = stock.map(s => ({...s, desc: s.descripcion || s.desc || '', retirado: s.retirado || 'NO'}));
       STATE.movimientos = movs.map(m => ({...m, desc: m.descripcion || m.desc || ''}));
       STATE.packingList = packing.map(p => ({...p, desc: p.descripcion || p.desc || ''}));
     }
