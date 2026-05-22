@@ -22,7 +22,7 @@ def init_db():
         CREATE TABLE IF NOT EXISTS stock (
             id TEXT PRIMARY KEY,
             codigo TEXT NOT NULL,
-            desc TEXT,
+            descripcion TEXT,
             contenedor TEXT,
             status TEXT,
             fv TEXT,
@@ -37,7 +37,7 @@ def init_db():
             id TEXT PRIMARY KEY,
             fecha TEXT NOT NULL,
             codigo TEXT,
-            desc TEXT,
+            descripcion TEXT,
             categoria TEXT,
             qty INTEGER,
             tipo TEXT,
@@ -60,7 +60,7 @@ def init_db():
         CREATE TABLE IF NOT EXISTS packing_list (
             id TEXT PRIMARY KEY,
             cod TEXT,
-            desc TEXT,
+            descripcion TEXT,
             contenedor TEXT,
             qty_pl INTEGER DEFAULT 0,
             qty_in INTEGER DEFAULT 0,
@@ -127,8 +127,8 @@ def add_stock():
     conn = get_db()
     cur = conn.cursor()
     cur.execute("""
-        INSERT INTO stock (id, codigo, desc, contenedor, status, fv, qty, qty_in, fech_ing, categoria)
-        VALUES (%(id)s, %(codigo)s, %(desc)s, %(contenedor)s, %(status)s, %(fv)s, %(qty)s, %(qty_in)s, %(fech_ing)s, %(categoria)s)
+        INSERT INTO stock (id, codigo, descripcion, contenedor, status, fv, qty, qty_in, fech_ing, categoria)
+        VALUES (%(id)s, %(codigo)s, %(descripcion)s, %(contenedor)s, %(status)s, %(fv)s, %(qty)s, %(qty_in)s, %(fech_ing)s, %(categoria)s)
         ON CONFLICT (id) DO UPDATE SET
             qty = EXCLUDED.qty, status = EXCLUDED.status, updated_at = NOW()
     """, data)
@@ -142,8 +142,8 @@ def bulk_stock():
     cur = conn.cursor()
     for item in items:
         cur.execute("""
-            INSERT INTO stock (id, codigo, desc, contenedor, status, fv, qty, qty_in, fech_ing, categoria)
-            VALUES (%(id)s, %(codigo)s, %(desc)s, %(contenedor)s, %(status)s, %(fv)s, %(qty)s, %(qty_in)s, %(fech_ing)s, %(categoria)s)
+            INSERT INTO stock (id, codigo, descripcion, contenedor, status, fv, qty, qty_in, fech_ing, categoria)
+            VALUES (%(id)s, %(codigo)s, %(descripcion)s, %(contenedor)s, %(status)s, %(fv)s, %(qty)s, %(qty_in)s, %(fech_ing)s, %(categoria)s)
             ON CONFLICT (id) DO UPDATE SET
                 qty = EXCLUDED.qty, qty_in = EXCLUDED.qty_in,
                 status = EXCLUDED.status, updated_at = NOW()
@@ -177,8 +177,8 @@ def add_movimiento():
     conn = get_db()
     cur = conn.cursor()
     cur.execute("""
-        INSERT INTO movimientos (id, fecha, codigo, desc, categoria, qty, tipo, guia, fv, contenedor, origen, estado, distribuidor)
-        VALUES (%(id)s, %(fecha)s, %(codigo)s, %(desc)s, %(categoria)s, %(qty)s, %(tipo)s, %(guia)s, %(fv)s, %(contenedor)s, %(origen)s, %(estado)s, %(distribuidor)s)
+        INSERT INTO movimientos (id, fecha, codigo, descripcion, categoria, qty, tipo, guia, fv, contenedor, origen, estado, distribuidor)
+        VALUES (%(id)s, %(fecha)s, %(codigo)s, %(descripcion)s, %(categoria)s, %(qty)s, %(tipo)s, %(guia)s, %(fv)s, %(contenedor)s, %(origen)s, %(estado)s, %(distribuidor)s)
         ON CONFLICT (id) DO NOTHING
     """, data)
     conn.commit(); cur.close(); conn.close()
@@ -191,8 +191,8 @@ def bulk_movimientos():
     cur = conn.cursor()
     for item in items:
         cur.execute("""
-            INSERT INTO movimientos (id, fecha, codigo, desc, categoria, qty, tipo, guia, fv, contenedor, origen, estado, distribuidor)
-            VALUES (%(id)s, %(fecha)s, %(codigo)s, %(desc)s, %(categoria)s, %(qty)s, %(tipo)s, %(guia)s, %(fv)s, %(contenedor)s, %(origen)s, %(estado)s, %(distribuidor)s)
+            INSERT INTO movimientos (id, fecha, codigo, descripcion, categoria, qty, tipo, guia, fv, contenedor, origen, estado, distribuidor)
+            VALUES (%(id)s, %(fecha)s, %(codigo)s, %(descripcion)s, %(categoria)s, %(qty)s, %(tipo)s, %(guia)s, %(fv)s, %(contenedor)s, %(origen)s, %(estado)s, %(distribuidor)s)
             ON CONFLICT (id) DO NOTHING
         """, item)
     conn.commit(); cur.close(); conn.close()
@@ -221,9 +221,9 @@ def registrar_despacho():
     # Registrar movimiento
     mov_id = f"MOV-DESP-{datetime.now().strftime('%Y%m%d%H%M%S%f')}"
     cur.execute("""
-        INSERT INTO movimientos (id, fecha, codigo, desc, categoria, qty, tipo, guia, fv, contenedor, origen, estado, distribuidor)
+        INSERT INTO movimientos (id, fecha, codigo, descripcion, categoria, qty, tipo, guia, fv, contenedor, origen, estado, distribuidor)
         VALUES (%s, %s, %s, %s, %s, %s, 'SALIDA', %s, %s, %s, 'STOCK_NUEVO', 'DISPONIBLE', %s)
-    """, (mov_id, data['fecha'], data['codigo'], data['desc'], data.get('categoria',''),
+    """, (mov_id, data['fecha'], data['codigo'], data['descripcion'], data.get('categoria',''),
           -abs(data['qty']), data['guia'], data.get('fv',''), data['contenedor'], data.get('distribuidor','')))
 
     conn.commit(); cur.close(); conn.close()
@@ -241,8 +241,8 @@ def baja_merma():
                     (linea['qty'], linea['stock_id']))
         mov_id = f"MOV-BAJA-{datetime.now().strftime('%Y%m%d%H%M%S%f')}"
         cur.execute("""
-            INSERT INTO movimientos (id, fecha, codigo, desc, categoria, qty, tipo, guia, fv, contenedor, origen, estado, distribuidor)
-            SELECT %s, %s, codigo, desc, categoria, -%s, 'MERMA', %s, fv, contenedor, 'STOCK_NUEVO', 'MERMA', ''
+            INSERT INTO movimientos (id, fecha, codigo, descripcion, categoria, qty, tipo, guia, fv, contenedor, origen, estado, distribuidor)
+            SELECT %s, %s, codigo, descripcion, categoria, -%s, 'MERMA', %s, fv, contenedor, 'STOCK_NUEVO', 'MERMA', ''
             FROM stock WHERE id = %s
         """, (mov_id, data['fecha'], linea['qty'], data.get('informe_id','BAJA'), linea['stock_id']))
 
@@ -273,9 +273,9 @@ def add_packing():
     for item in items:
         item_id = f"PL-{datetime.now().strftime('%Y%m%d%H%M%S%f')}-{item.get('cod','')}"
         cur.execute("""
-            INSERT INTO packing_list (id, cod, desc, contenedor, qty_pl, qty_in, dif, fecha_ing, estado)
+            INSERT INTO packing_list (id, cod, descripcion, contenedor, qty_pl, qty_in, dif, fecha_ing, estado)
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
-        """, (item_id, item['cod'], item['desc'], item['contenedor'],
+        """, (item_id, item['cod'], item['descripcion'], item['contenedor'],
               item['qty_pl'], item['qty_in'], item['dif'], item['fecha_ing'], item.get('estado','REVISADO')))
     conn.commit(); cur.close(); conn.close()
     return jsonify({'ok': True})
@@ -291,14 +291,23 @@ def ajuste():
     mov_id = f"MOV-AJ-{datetime.now().strftime('%Y%m%d%H%M%S%f')}"
     tipo = 'AJUSTE-IN' if data['delta'] > 0 else 'AJUSTE-OUT'
     cur.execute("""
-        INSERT INTO movimientos (id, fecha, codigo, desc, categoria, qty, tipo, guia, fv, contenedor, origen, estado, distribuidor)
-        SELECT %s, %s, codigo, desc, categoria, %s, %s, %s, fv, contenedor, 'STOCK_NUEVO', status, ''
+        INSERT INTO movimientos (id, fecha, codigo, descripcion, categoria, qty, tipo, guia, fv, contenedor, origen, estado, distribuidor)
+        SELECT %s, %s, codigo, descripcion, categoria, %s, %s, %s, fv, contenedor, 'STOCK_NUEVO', status, ''
         FROM stock WHERE id = %s
     """, (mov_id, data['fecha'], data['delta'], tipo, data.get('motivo','AJUSTE'), data['stock_id']))
     conn.commit(); cur.close(); conn.close()
     return jsonify({'ok': True})
 
 # ── INIT ───────────────────────────────────────────────
+
+@app.route('/api/init', methods=['GET'])
+def force_init():
+    try:
+        init_db()
+        return jsonify({'ok': True, 'msg': 'Tablas creadas correctamente'})
+    except Exception as e:
+        return jsonify({'ok': False, 'msg': str(e)}), 500
+
 if __name__ == '__main__':
     init_db()
     port = int(os.environ.get('PORT', 8080))
