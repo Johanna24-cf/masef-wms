@@ -677,7 +677,8 @@ function getStockParaExport() {
   const buscar = (document.getElementById('flt-buscar')||{}).value||'';
   const cont   = (document.getElementById('flt-contenedor')||{}).value||'';
   const st     = (document.getElementById('flt-status')||{}).value||'';
-  let rows = base.filter(r => (r.qty || 0) > 0);
+  let rows = base.filter(r => Number(r.qty) > 0); // forzar conversión numérica
+  rows = rows.filter(r => (r.qty || 0) > 0);
   if (buscar) rows = rows.filter(r=>r.codigo.toLowerCase().includes(buscar.toLowerCase())||r.desc.toLowerCase().includes(buscar.toLowerCase()));
   if (cont)   rows = rows.filter(r=>r.contenedor===cont);
   if (st)     rows = rows.filter(r=>r.status===st);
