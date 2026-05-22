@@ -677,7 +677,7 @@ function getStockParaExport() {
   const buscar = (document.getElementById('flt-buscar')||{}).value||'';
   const cont   = (document.getElementById('flt-contenedor')||{}).value||'';
   const st     = (document.getElementById('flt-status')||{}).value||'';
-  let rows = base.filter(r => r.qty > 0);
+  let rows = base.filter(r => (r.qty || 0) > 0);
   if (buscar) rows = rows.filter(r=>r.codigo.toLowerCase().includes(buscar.toLowerCase())||r.desc.toLowerCase().includes(buscar.toLowerCase()));
   if (cont)   rows = rows.filter(r=>r.contenedor===cont);
   if (st)     rows = rows.filter(r=>r.status===st);
@@ -3227,6 +3227,106 @@ function confirmarNuevoPacking() {
 </script>
 </script>
 
+
+<script>
+// ============================================================
+// API CLIENT
+// ============================================================
+const API = {
+  async call(method, path, body=null) {
+    const opts = { method, headers: {'Content-Type':'application/json'} };
+    if (body) opts.body = JSON.stringify(body);
+    const res = await fetch(path, opts);
+    if (!res.ok) { const t = await res.text(); throw new Error(t); }
+    return res.json();
+  },
+  get:  (path)       => API.call('GET', path),
+  post: (path, body) => API.call('POST', path, body),
+};
+
+async function loadDataFromAPI() {
+  try {
+    const [stock, movs, packing] = await Promise.all([
+      API.get('/api/stock'),
+      API.get('/api/movimientos'),
+      API.get('/api/packing'),
+    ]);
+
+    if (!stock || stock.length === 0) {
+      toast('Primera vez: cargando datos iniciales...', 'info');
+      seedData();
+      const stockDB = STATE.stock.map(s => ({...s, descripcion: s.desc || ''}));
+      const movsDB  = STATE.movimientos.map(m => ({...m, descripcion: m.desc || ''}));
+      const r1 = await API.post('/api/stock/bulk', stockDB);
+      const r2 = await API.post('/api/movimientos/bulk', movsDB);
+      if (STATE.packingList && STATE.packingList.length > 0)
+        await API.post('/api/packing', STATE.packingList);
+      toast('✅ Datos iniciales cargados');
+    } else {
+      // Mapear descripcion → desc para compatibilidad con el HTML
+      STATE.stock       = stock.map(s => ({...s, desc: s.descripcion || s.desc || ''}));
+      STATE.movimientos = movs.map(m => ({...m, desc: m.descripcion || m.desc || ''}));
+      STATE.packingList = packing || [];
+    }
+  } catch(e) {
+    console.error('Error cargando datos:', e);
+    toast('⚠️ Usando datos locales', 'warn');
+    seedData();
+  }
+}
+
+// Override doLogin para usar API
+window.doLoginAPI = async function(user, pass) {
+  try {
+    const res = await API.post('/api/login', {usuario: user, password: pass});
+    return res;
+  } catch(e) {
+    return null;
+  }
+};
+
+window.registrarDespachoAPI = async function(stockId, qty, guia, distribuidor) {
+  const item = STATE.stock.find(s => s.id === stockId);
+  if (!item) return {ok: false, msg: 'Item no encontrado'};
+  const res = await API.post('/api/despacho', {
+    stock_id: stockId, qty, guia,
+    fecha: new Date().toISOString().slice(0,10),
+    codigo: item.codigo, desc: item.desc,
+    contenedor: item.contenedor, fv: item.fv,
+    distribuidor: distribuidor || '',
+  });
+  if (res.ok) {
+    item.qty -= qty;
+    const movs = await API.get('/api/movimientos');
+    STATE.movimientos = movs.map(m => ({...m, desc: m.descripcion || m.desc || ''}));
+  }
+  return res;
+};
+
+window.bajaMermaAPI = async function(lineas) {
+  const informeId = 'INF-BAJA-' + Date.now();
+  const fecha = new Date().toISOString().slice(0,10);
+  const res = await API.post('/api/baja-merma', {lineas, fecha, informe_id: informeId});
+  if (res.ok) {
+    lineas.forEach(l => {
+      const item = STATE.stock.find(s => s.id === l.stock_id);
+      if (item) item.qty -= l.qty;
+    });
+  }
+  return res;
+};
+
+window.ajusteAPI = async function(stockId, delta, motivo) {
+  const fecha = new Date().toISOString().slice(0,10);
+  const res = await API.post('/api/ajuste', {stock_id: stockId, delta, motivo, fecha});
+  if (res.ok) {
+    const item = STATE.stock.find(s => s.id === stockId);
+    if (item) item.qty += delta;
+  }
+  return res;
+};
+</script>
+
 <script>
 // Login — se ejecuta después del script principal
 (function() {
@@ -3235,25 +3335,40 @@ function confirmarNuevoPacking() {
     'ClienteMasef': { pass: 'CF_Masef',  role: 'cliente', label: 'Cliente MASEF'  }
   };
 
-  window.doLogin = function() {
+  window.doLogin = async function() {
     var user = document.getElementById('login-user').value.trim();
     var pass = document.getElementById('login-pass').value;
     var err  = document.getElementById('login-error');
-    if (!USERS[user] || USERS[user].pass !== pass) {
+    err.textContent = 'Verificando...';
+    // Intentar login via API
+    var apiRes = await window.doLoginAPI(user, pass);
+    if (apiRes && apiRes.ok) {
+      // Login via API exitoso
+      err.textContent = '';
+      STATE.currentUser = user;
+      STATE.currentUserLabel = apiRes.label;
+      document.getElementById('login-overlay').classList.add('hidden');
+      document.getElementById('topbar-user-label').textContent = apiRes.label;
+      var roleToggle = document.getElementById('sidebar-role-toggle');
+      if (roleToggle) roleToggle.style.display = apiRes.rol === 'cliente' ? 'none' : '';
+      await loadDataFromAPI();
+      setRole(apiRes.rol);
+    } else if (USERS[user] && USERS[user].pass === pass) {
+      // Fallback local
+      err.textContent = '';
+      var u = USERS[user];
+      STATE.currentUser = user;
+      STATE.currentUserLabel = u.label;
+      document.getElementById('login-overlay').classList.add('hidden');
+      document.getElementById('topbar-user-label').textContent = u.label;
+      var roleToggle = document.getElementById('sidebar-role-toggle');
+      if (roleToggle) roleToggle.style.display = u.role === 'cliente' ? 'none' : '';
+      await loadDataFromAPI();
+      setRole(u.role);
+    } else {
       err.textContent = 'Usuario o contraseña incorrectos';
       document.getElementById('login-pass').value = '';
-      return;
     }
-    err.textContent = '';
-    var u = USERS[user];
-    STATE.currentUser = user;
-    STATE.currentUserLabel = u.label;
-    document.getElementById('login-overlay').classList.add('hidden');
-    document.getElementById('topbar-user-label').textContent = u.label;
-    var roleToggle = document.getElementById('sidebar-role-toggle');
-    if (roleToggle) roleToggle.style.display = u.role === 'cliente' ? 'none' : '';
-    seedData();
-    setRole(u.role);
   };
 
   window.doLogout = function() {
@@ -3265,155 +3380,6 @@ function confirmarNuevoPacking() {
     document.getElementById('login-error').textContent = '';
   };
 })();
-</script>
-
-<script>
-// ============================================================
-// API CLIENT — conecta con el backend Railway
-// ============================================================
-const API = {
-  async call(method, path, body=null) {
-    const opts = { method, headers: {'Content-Type':'application/json'} };
-    if (body) opts.body = JSON.stringify(body);
-    const res = await fetch(path, opts);
-    return res.json();
-  },
-  get:    (path)       => API.call('GET', path),
-  post:   (path, body) => API.call('POST', path, body),
-  patch:  (path, body) => API.call('PATCH', path, body),
-};
-
-// Override doLogin para usar API
-window.doLogin = async function() {
-  const user = document.getElementById('login-user').value.trim();
-  const pass = document.getElementById('login-pass').value;
-  const err  = document.getElementById('login-error');
-  err.textContent = 'Verificando...';
-
-  try {
-    const res = await API.post('/api/login', {usuario: user, password: pass});
-    if (!res.ok) {
-      err.textContent = res.msg || 'Usuario o contraseña incorrectos';
-      document.getElementById('login-pass').value = '';
-      return;
-    }
-    err.textContent = '';
-    STATE.currentUser      = user;
-    STATE.currentUserLabel = res.label;
-    document.getElementById('login-overlay').classList.add('hidden');
-    document.getElementById('topbar-user-label').textContent = res.label;
-    const roleToggle = document.getElementById('sidebar-role-toggle');
-    if (roleToggle) roleToggle.style.display = res.rol === 'cliente' ? 'none' : '';
-
-    // Cargar datos desde la API
-    toast('Cargando datos...', 'info');
-    await loadDataFromAPI();
-    setRole(res.rol);
-  } catch(e) {
-    err.textContent = 'Error de conexión';
-  }
-};
-
-async function loadDataFromAPI() {
-  try {
-    const [stock, movs, packing] = await Promise.all([
-      API.get('/api/stock'),
-      API.get('/api/movimientos'),
-      API.get('/api/packing'),
-    ]);
-
-    // Si la DB está vacía, cargar datos del HTML (seed inicial)
-    if (stock.length === 0) {
-      toast('Primera vez: cargando datos iniciales...', 'info');
-      seedData(); // carga en STATE
-      // Mapear desc → descripcion para la DB
-      const stockDB = STATE.stock.map(s => ({...s, descripcion: s.desc || s.descripcion || ''}));
-      const movsDB  = STATE.movimientos.map(m => ({...m, descripcion: m.desc || m.descripcion || ''}));
-      // Enviar stock y movimientos a la API
-      const r1 = await API.post('/api/stock/bulk', stockDB);
-      const r2 = await API.post('/api/movimientos/bulk', movsDB);
-      if (STATE.packingList && STATE.packingList.length > 0) {
-        await API.post('/api/packing', STATE.packingList);
-      }
-      if (r1.ok && r2.ok) {
-        toast('✅ Datos iniciales cargados correctamente');
-      } else {
-        toast('⚠️ Error parcial cargando datos: ' + JSON.stringify(r1) + JSON.stringify(r2), 'warn');
-      }
-    } else {
-      // Usar datos de la API
-      STATE.stock        = stock;
-      STATE.movimientos  = movs;
-      STATE.packingList  = packing;
-    }
-  } catch(e) {
-    console.error('Error cargando datos:', e);
-    toast('⚠️ Error cargando datos, usando datos locales', 'warn');
-    seedData();
-  }
-}
-
-// Override despacho para guardar en API
-window.registrarDespachoAPI = async function(stockId, qty, guia, distribuidor) {
-  const item = STATE.stock.find(s => s.id === stockId);
-  if (!item) return { ok: false, msg: 'Item no encontrado' };
-  const res = await API.post('/api/despacho', {
-    stock_id:    stockId,
-    qty:         qty,
-    guia:        guia,
-    fecha:       new Date().toISOString().slice(0,10),
-    codigo:      item.codigo,
-    desc:        item.desc,
-    contenedor:  item.contenedor,
-    fv:          item.fv,
-    distribuidor: distribuidor || '',
-  });
-  if (res.ok) {
-    item.qty -= qty; // actualizar local
-    const movs = await API.get('/api/movimientos');
-    STATE.movimientos = movs;
-  }
-  return res;
-};
-
-// Override baja merma para guardar en API
-window.bajaMermaAPI = async function(lineas) {
-  const informeId = 'INF-BAJA-' + Date.now();
-  const fecha = new Date().toISOString().slice(0,10);
-  const res = await API.post('/api/baja-merma', { lineas, fecha, informe_id: informeId });
-  if (res.ok) {
-    lineas.forEach(l => {
-      const item = STATE.stock.find(s => s.id === l.stock_id);
-      if (item) item.qty -= l.qty;
-    });
-    const movs = await API.get('/api/movimientos');
-    STATE.movimientos = movs;
-  }
-  return res;
-};
-
-// Override ajuste para guardar en API
-window.ajusteAPI = async function(stockId, delta, motivo) {
-  const fecha = new Date().toISOString().slice(0,10);
-  const res = await API.post('/api/ajuste', { stock_id: stockId, delta, motivo, fecha });
-  if (res.ok) {
-    const item = STATE.stock.find(s => s.id === stockId);
-    if (item) item.qty += delta;
-    const movs = await API.get('/api/movimientos');
-    STATE.movimientos = movs;
-  }
-  return res;
-};
-
-// Override packing para guardar en API
-window.guardarPackingAPI = async function(items) {
-  const res = await API.post('/api/packing', items);
-  if (res.ok) {
-    const packing = await API.get('/api/packing');
-    STATE.packingList = packing;
-  }
-  return res;
-};
 </script>
 </body>
 </html>
