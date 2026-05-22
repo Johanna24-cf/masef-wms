@@ -866,8 +866,8 @@ function verStockHistorico() {
       })
       .forEach(function(m) {
         var key = m.codigo + '||' + (m.contenedor||'');
-        if (!stockMap[key]) stockMap[key] = { codigo: m.codigo, desc: m.desc, contenedor: m.contenedor||'', fv: '', status: 'GENERAL', qty: 0, um: 'u' };
-        var delta = (m.delta !== undefined) ? m.delta : (m.qty || 0);
+        if (!stockMap[key]) stockMap[key] = { codigo: m.codigo, desc: m.desc||m.descripcion||'', contenedor: m.contenedor||'', fv: '', status: 'GENERAL', qty: 0, um: 'u' };
+        var delta = (m.delta !== undefined) ? Number(m.delta) : Number(m.qty || 0);
         stockMap[key].qty += delta;
       });
   } else {
@@ -881,13 +881,13 @@ function verStockHistorico() {
       .forEach(function(m) {
         var status = m.estado || m.status || '';
         var key = m.codigo + '||' + (m.contenedor||'') + '||' + (m.fv||'') + '||' + status;
-        if (!stockMap[key]) stockMap[key] = { codigo: m.codigo, desc: m.desc, contenedor: m.contenedor||'', fv: m.fv||'', status: status, qty: 0, um: 'u' };
-        var delta = (m.delta !== undefined) ? m.delta : (m.qty || 0);
+        if (!stockMap[key]) stockMap[key] = { codigo: m.codigo, desc: m.desc||m.descripcion||'', contenedor: m.contenedor||'', fv: m.fv||'', status: status, qty: 0, um: 'u' };
+        var delta = (m.delta !== undefined) ? Number(m.delta) : Number(m.qty || 0);
         stockMap[key].qty += delta;
       });
   }
 
-  var histStock = Object.values(stockMap).filter(function(s){ return s.qty > 0; });
+  var histStock = Object.values(stockMap).filter(function(s){ return Number(s.qty) > 0; });
   if (!histStock.length) {
     var fechaMin = STATE.movimientos.map(function(m){ return m.fecha||m.fechaISO; }).filter(Boolean).sort()[0];
     var msg = fechaMin ? ('Sin datos para el ' + fmtFV(fecha) + '. El primer movimiento es del ' + fmtFV(fechaMin)) : 'No hay movimientos registrados.';
