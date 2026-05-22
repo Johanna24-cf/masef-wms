@@ -3326,13 +3326,20 @@ async function loadDataFromAPI() {
     if (stock.length === 0) {
       toast('Primera vez: cargando datos iniciales...', 'info');
       seedData(); // carga en STATE
+      // Mapear desc → descripcion para la DB
+      const stockDB = STATE.stock.map(s => ({...s, descripcion: s.desc || s.descripcion || ''}));
+      const movsDB  = STATE.movimientos.map(m => ({...m, descripcion: m.desc || m.descripcion || ''}));
       // Enviar stock y movimientos a la API
-      await API.post('/api/stock/bulk', STATE.stock);
-      await API.post('/api/movimientos/bulk', STATE.movimientos);
+      const r1 = await API.post('/api/stock/bulk', stockDB);
+      const r2 = await API.post('/api/movimientos/bulk', movsDB);
       if (STATE.packingList && STATE.packingList.length > 0) {
         await API.post('/api/packing', STATE.packingList);
       }
-      toast('✅ Datos iniciales cargados en la base de datos');
+      if (r1.ok && r2.ok) {
+        toast('✅ Datos iniciales cargados correctamente');
+      } else {
+        toast('⚠️ Error parcial cargando datos: ' + JSON.stringify(r1) + JSON.stringify(r2), 'warn');
+      }
     } else {
       // Usar datos de la API
       STATE.stock        = stock;
