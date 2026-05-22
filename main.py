@@ -140,16 +140,33 @@ def bulk_stock():
     items = request.json
     conn = get_db()
     cur = conn.cursor()
+    errors = []
     for item in items:
-        cur.execute("""
-            INSERT INTO stock (id, codigo, descripcion, contenedor, status, fv, qty, qty_in, fech_ing, categoria)
-            VALUES (%(id)s, %(codigo)s, %(descripcion)s, %(contenedor)s, %(status)s, %(fv)s, %(qty)s, %(qty_in)s, %(fech_ing)s, %(categoria)s)
-            ON CONFLICT (id) DO UPDATE SET
-                qty = EXCLUDED.qty, qty_in = EXCLUDED.qty_in,
-                status = EXCLUDED.status, updated_at = NOW()
-        """, item)
+        try:
+            row = {
+                'id':          str(item.get('id', '')),
+                'codigo':      str(item.get('codigo', '')),
+                'descripcion': str(item.get('descripcion') or item.get('desc') or ''),
+                'contenedor':  str(item.get('contenedor', '')),
+                'status':      str(item.get('status', 'DISPONIBLE')),
+                'fv':          str(item.get('fv', '')),
+                'qty':         int(item.get('qty', 0) or 0),
+                'qty_in':      int(item.get('qty_in', 0) or 0),
+                'fech_ing':    str(item.get('fech_ing', '')),
+                'categoria':   str(item.get('categoria', '')),
+            }
+            cur.execute("""
+                INSERT INTO stock (id, codigo, descripcion, contenedor, status, fv, qty, qty_in, fech_ing, categoria)
+                VALUES (%(id)s, %(codigo)s, %(descripcion)s, %(contenedor)s, %(status)s, %(fv)s, %(qty)s, %(qty_in)s, %(fech_ing)s, %(categoria)s)
+                ON CONFLICT (id) DO UPDATE SET
+                    qty = EXCLUDED.qty, qty_in = EXCLUDED.qty_in,
+                    status = EXCLUDED.status, updated_at = NOW()
+            """, row)
+        except Exception as e:
+            errors.append(str(e))
+            conn.rollback()
     conn.commit(); cur.close(); conn.close()
-    return jsonify({'ok': True, 'count': len(items)})
+    return jsonify({'ok': True, 'count': len(items), 'errors': errors[:5]})
 
 @app.route('/api/stock/<stock_id>', methods=['PATCH'])
 def update_stock(stock_id):
@@ -189,14 +206,34 @@ def bulk_movimientos():
     items = request.json
     conn = get_db()
     cur = conn.cursor()
+    errors = []
     for item in items:
-        cur.execute("""
-            INSERT INTO movimientos (id, fecha, codigo, descripcion, categoria, qty, tipo, guia, fv, contenedor, origen, estado, distribuidor)
-            VALUES (%(id)s, %(fecha)s, %(codigo)s, %(descripcion)s, %(categoria)s, %(qty)s, %(tipo)s, %(guia)s, %(fv)s, %(contenedor)s, %(origen)s, %(estado)s, %(distribuidor)s)
-            ON CONFLICT (id) DO NOTHING
-        """, item)
+        try:
+            row = {
+                'id':          str(item.get('id', '')),
+                'fecha':       str(item.get('fecha', '')),
+                'codigo':      str(item.get('codigo', '')),
+                'descripcion': str(item.get('descripcion') or item.get('desc') or ''),
+                'categoria':   str(item.get('categoria', '')),
+                'qty':         int(item.get('qty', 0) or 0),
+                'tipo':        str(item.get('tipo', '')),
+                'guia':        str(item.get('guia', '')),
+                'fv':          str(item.get('fv', '')),
+                'contenedor':  str(item.get('contenedor', '')),
+                'origen':      str(item.get('origen', '')),
+                'estado':      str(item.get('estado', '')),
+                'distribuidor':str(item.get('distribuidor', '')),
+            }
+            cur.execute("""
+                INSERT INTO movimientos (id, fecha, codigo, descripcion, categoria, qty, tipo, guia, fv, contenedor, origen, estado, distribuidor)
+                VALUES (%(id)s, %(fecha)s, %(codigo)s, %(descripcion)s, %(categoria)s, %(qty)s, %(tipo)s, %(guia)s, %(fv)s, %(contenedor)s, %(origen)s, %(estado)s, %(distribuidor)s)
+                ON CONFLICT (id) DO NOTHING
+            """, row)
+        except Exception as e:
+            errors.append(str(e))
+            conn.rollback()
     conn.commit(); cur.close(); conn.close()
-    return jsonify({'ok': True, 'count': len(items)})
+    return jsonify({'ok': True, 'count': len(items), 'errors': errors[:5]})
 
 # ── DESPACHOS ──────────────────────────────────────────
 @app.route('/api/despacho', methods=['POST'])
