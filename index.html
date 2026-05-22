@@ -3285,7 +3285,7 @@ async function loadDataFromAPI() {
       // Mapear descripcion → desc para compatibilidad con el HTML
       STATE.stock       = stock.map(s => ({...s, desc: s.descripcion || s.desc || ''}));
       STATE.movimientos = movs.map(m => ({...m, desc: m.descripcion || m.desc || ''}));
-      STATE.packingList = packing || [];
+      STATE.packingList = packing.map(p => ({...p, desc: p.descripcion || p.desc || ''}));
     }
   } catch(e) {
     console.error('Error cargando datos:', e);
