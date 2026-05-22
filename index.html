@@ -576,7 +576,7 @@ function renderStock() {
         <span class="panel-title" style="font-size:13px;">📅 Stock histórico por fecha</span>
       </div>
       <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
-        <input type="date" id="hist-date" class="form-control" style="width:180px;" max="2026-05-18">
+        <input type="date" id="hist-date" class="form-control" style="width:180px;" max="2026-05-22">
         <button class="btn btn-primary btn-sm" onclick="verStockHistorico()">Ver stock en esa fecha</button>
         <button class="btn btn-sm" onclick="volverStockActual()" id="btn-volver-actual" style="display:none">← Volver al actual</button>
         <span id="hist-label" style="font-size:12px;color:var(--text3);"></span>
@@ -2231,7 +2231,7 @@ function renderTrazabilidad() {
           <option value="BANDEJA">BANDEJA</option>
         </select>
         <input type="date" id="trz-flt-desde" class="form-control" style="width:145px;" placeholder="Desde" onchange="filtrarTrazabilidad()">
-        <input type="date" id="trz-flt-hasta" class="form-control" style="width:145px;" placeholder="Hasta" max="2026-05-18" onchange="filtrarTrazabilidad()">
+        <input type="date" id="trz-flt-hasta" class="form-control" style="width:145px;" placeholder="Hasta" max="2026-05-22" onchange="filtrarTrazabilidad()">
       </div>
       <div id="trz-list"></div>
     </div>
