@@ -618,6 +618,11 @@ function renderStock() {
     </div>
   `;
   renderStockTable();
+  // Forzar max del selector de fecha histórica
+  setTimeout(function(){ 
+    var hd = document.getElementById('hist-date'); 
+    if(hd) hd.max = '2026-05-22'; 
+  }, 50);
 }
 
 function renderStockTable(data) {
@@ -929,6 +934,9 @@ function volverStockActual() {
   document.getElementById('btn-volver-actual').style.display = 'none';
   STATE.histStock = null;
   STATE.histFecha = null;
+  // Asegurar max del selector de fecha
+  var hdInput = document.getElementById('hist-date');
+  if (hdInput) hdInput.max = '2026-05-22';
   renderStockTable();
 }
 
