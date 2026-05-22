@@ -852,6 +852,24 @@ function exportStockPDF(rows, nombre, etiqueta='') {
 function verStockHistorico() {
   var fecha = document.getElementById('hist-date').value;
   if (!fecha) return;
+
+  // Normalizar dd/mm/yyyy → yyyy-mm-dd
+  var matchDMY = fecha.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+  if (matchDMY) fecha = matchDMY[3] + '-' + matchDMY[2].padStart(2,'0') + '-' + matchDMY[1].padStart(2,'0');
+
+  // Si la fecha es >= al último movimiento → usar stock actual (evita recalcular con movimientos incompletos)
+  var fechaMax = STATE.movimientos.map(function(m){ return m.fecha||''; }).filter(Boolean).sort().reverse()[0] || '';
+  if (fechaMax && fecha >= fechaMax) {
+    var histStock = STATE.stock.filter(function(s){ return Number(s.qty) > 0; });
+    document.getElementById('hist-label').textContent = 'Stock al ' + fmtFV(fecha) + ' — ' + histStock.length + ' línea(s)';
+    document.getElementById('btn-volver-actual').style.display = '';
+    STATE.histStock = histStock;
+    STATE.histFecha = fecha;
+    renderStockTable(histStock);
+    toast('Stock al ' + fmtFV(fecha));
+    return;
+  }
+
   var stockMap = {};
   var CORTE = '2026-02-24';
 
