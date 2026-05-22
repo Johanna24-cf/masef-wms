@@ -3266,5 +3266,147 @@ function confirmarNuevoPacking() {
   };
 })();
 </script>
+
+<script>
+// ============================================================
+// API CLIENT — conecta con el backend Railway
+// ============================================================
+const API = {
+  async call(method, path, body=null) {
+    const opts = { method, headers: {'Content-Type':'application/json'} };
+    if (body) opts.body = JSON.stringify(body);
+    const res = await fetch(path, opts);
+    return res.json();
+  },
+  get:    (path)       => API.call('GET', path),
+  post:   (path, body) => API.call('POST', path, body),
+  patch:  (path, body) => API.call('PATCH', path, body),
+};
+
+// Override doLogin para usar API
+window.doLogin = async function() {
+  const user = document.getElementById('login-user').value.trim();
+  const pass = document.getElementById('login-pass').value;
+  const err  = document.getElementById('login-error');
+  err.textContent = 'Verificando...';
+
+  try {
+    const res = await API.post('/api/login', {usuario: user, password: pass});
+    if (!res.ok) {
+      err.textContent = res.msg || 'Usuario o contraseña incorrectos';
+      document.getElementById('login-pass').value = '';
+      return;
+    }
+    err.textContent = '';
+    STATE.currentUser      = user;
+    STATE.currentUserLabel = res.label;
+    document.getElementById('login-overlay').classList.add('hidden');
+    document.getElementById('topbar-user-label').textContent = res.label;
+    const roleToggle = document.getElementById('sidebar-role-toggle');
+    if (roleToggle) roleToggle.style.display = res.rol === 'cliente' ? 'none' : '';
+
+    // Cargar datos desde la API
+    toast('Cargando datos...', 'info');
+    await loadDataFromAPI();
+    setRole(res.rol);
+  } catch(e) {
+    err.textContent = 'Error de conexión';
+  }
+};
+
+async function loadDataFromAPI() {
+  try {
+    const [stock, movs, packing] = await Promise.all([
+      API.get('/api/stock'),
+      API.get('/api/movimientos'),
+      API.get('/api/packing'),
+    ]);
+
+    // Si la DB está vacía, cargar datos del HTML (seed inicial)
+    if (stock.length === 0) {
+      toast('Primera vez: cargando datos iniciales...', 'info');
+      seedData(); // carga en STATE
+      // Enviar stock y movimientos a la API
+      await API.post('/api/stock/bulk', STATE.stock);
+      await API.post('/api/movimientos/bulk', STATE.movimientos);
+      if (STATE.packingList && STATE.packingList.length > 0) {
+        await API.post('/api/packing', STATE.packingList);
+      }
+      toast('✅ Datos iniciales cargados en la base de datos');
+    } else {
+      // Usar datos de la API
+      STATE.stock        = stock;
+      STATE.movimientos  = movs;
+      STATE.packingList  = packing;
+    }
+  } catch(e) {
+    console.error('Error cargando datos:', e);
+    toast('⚠️ Error cargando datos, usando datos locales', 'warn');
+    seedData();
+  }
+}
+
+// Override despacho para guardar en API
+window.registrarDespachoAPI = async function(stockId, qty, guia, distribuidor) {
+  const item = STATE.stock.find(s => s.id === stockId);
+  if (!item) return { ok: false, msg: 'Item no encontrado' };
+  const res = await API.post('/api/despacho', {
+    stock_id:    stockId,
+    qty:         qty,
+    guia:        guia,
+    fecha:       new Date().toISOString().slice(0,10),
+    codigo:      item.codigo,
+    desc:        item.desc,
+    contenedor:  item.contenedor,
+    fv:          item.fv,
+    distribuidor: distribuidor || '',
+  });
+  if (res.ok) {
+    item.qty -= qty; // actualizar local
+    const movs = await API.get('/api/movimientos');
+    STATE.movimientos = movs;
+  }
+  return res;
+};
+
+// Override baja merma para guardar en API
+window.bajaMermaAPI = async function(lineas) {
+  const informeId = 'INF-BAJA-' + Date.now();
+  const fecha = new Date().toISOString().slice(0,10);
+  const res = await API.post('/api/baja-merma', { lineas, fecha, informe_id: informeId });
+  if (res.ok) {
+    lineas.forEach(l => {
+      const item = STATE.stock.find(s => s.id === l.stock_id);
+      if (item) item.qty -= l.qty;
+    });
+    const movs = await API.get('/api/movimientos');
+    STATE.movimientos = movs;
+  }
+  return res;
+};
+
+// Override ajuste para guardar en API
+window.ajusteAPI = async function(stockId, delta, motivo) {
+  const fecha = new Date().toISOString().slice(0,10);
+  const res = await API.post('/api/ajuste', { stock_id: stockId, delta, motivo, fecha });
+  if (res.ok) {
+    const item = STATE.stock.find(s => s.id === stockId);
+    if (item) item.qty += delta;
+    const movs = await API.get('/api/movimientos');
+    STATE.movimientos = movs;
+  }
+  return res;
+};
+
+// Override packing para guardar en API
+window.guardarPackingAPI = async function(items) {
+  const res = await API.post('/api/packing', items);
+  if (res.ok) {
+    const packing = await API.get('/api/packing');
+    STATE.packingList = packing;
+  }
+  return res;
+};
+</script>
 </body>
 </html>
